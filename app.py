@@ -4,69 +4,54 @@ import json
 from transformers import AutoTokenizer
 
 # --- Page Configuration ---
-st.set_page_config(page_title="PoulStar AI", page_icon="✨", layout="wide")
+st.set_page_config(page_title="Mixtral Chatbot", page_icon="🤖")
+st.title("🤖 Mixtral Chatbot")
+st.caption("A powerful chatbot using the Mixtral 8x7B model via Hugging Face API.")
 
 # --- Constants and API Setup ---
 MODEL_ID = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
-POULSTAR_LOGO_URL = "https://raw.githubusercontent.com/poulstar/.github/main/logo.png"
 
-# --- Header Section with Logo ---
-col1, col2, col3 = st.columns([1, 0.5, 1])
-with col2:
-    st.image(POULSTAR_LOGO_URL, width=200)
-
-# --- Main Title and Caption ---
-st.title("PoulStar AI Assistant")
-st.caption("✨ Powered by Advanced AI")
-st.divider()
-
-# --- Sidebar for Advanced Settings ---
-with st.sidebar:
-    st.header("⚙️ Settings")
-    st.write("Here you can control the AI assistant.")
-    
-    max_new_tokens = st.slider(
-        "Max Answer Length",
-        min_value=128, max_value=1024, value=512, step=64,
-        help="The maximum number of words in the AI's answer."
-    )
-    temperature = st.slider(
-        "Creativity",
-        min_value=0.1, max_value=1.0, value=0.7, step=0.1,
-        help="High value = more creative. Low value = more direct."
-    )
-    st.divider()
-    st.info("Made by PoulStar Institute")
-
-# --- Load tokenizer (cached) ---
+# --- Load the tokenizer once using Streamlit's cache ---
+# This is lightweight and doesn't require torch or a GPU.
 @st.cache_resource
 def load_tokenizer():
+    """Loads the tokenizer from Hugging Face."""
     return AutoTokenizer.from_pretrained(MODEL_ID)
 
 tokenizer = load_tokenizer()
 
-# --- Helper Function for API Call ---
-def get_ai_response(messages):
+# --- Helper Function to Call the API ---
+def get_mixtral_response(messages):
+    """
+    Formats the chat history using the official tokenizer and sends it to the API.
+    """
     try:
         hf_token = st.secrets["HF_TOKEN"]
     except FileNotFoundError:
-        st.error("Hugging Face API token not found. Please add it to your Streamlit Secrets.", icon="🔑")
+        st.error("Hugging Face API token not found. Please add it to your Streamlit secrets.", icon="🔑")
         return
 
     headers = {"Authorization": f"Bearer {hf_token}"}
     
+    # --- THE CORRECT WAY TO FORMAT THE PROMPT ---
+    # Use the tokenizer to apply the chat template. This is the official and robust method.
+    # We set add_generation_prompt=True to ensure the template ends correctly for the model to generate a response.
     prompt_string = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
     payload = {
         "inputs": prompt_string,
         "parameters": {
-            "max_new_tokens": max_new_tokens,
-            "temperature": temperature,
+            "max_new_tokens": 512,
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "repetition_penalty": 1.1,
             "return_full_text": False
         },
         "stream": True,
-        "options": {"wait_for_model": True}
+        "options": {
+            "wait_for_model": True
+        }
     }
 
     try:
@@ -81,37 +66,32 @@ def get_ai_response(messages):
                             data = json.loads(json_str)
                             yield data.get("token", {}).get("text", "")
     except requests.exceptions.RequestException as e:
-        yield f"\n\n**Error:** Could not connect to the AI server. Please try again later. ({e})"
-    except Exception as e:
-        yield f"\n\n**An unexpected error occurred:** {e}"
+        yield f"\n\n**Error:** Could not connect to the API. {e}"
+    except json.JSONDecodeError as e:
+        yield f"\n\n**Error:** Failed to parse the response from the API. {e}"
+
 
 # --- Chat Interface Logic ---
 
-# --- THIS IS THE LINE THAT WAS CHANGED ---
-# Initialize chat history with a system prompt and a welcome message.
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": "You are PoulStar AI, a helpful and friendly assistant."},
-        {"role": "assistant", "content": "Hello! I am the PoulStar AI Assistant. How can I help you today?"}
-    ]
-# --- END OF CHANGE ---
+    st.session_state.messages = [] # Start with an empty history
 
-# Display previous messages, but skip the system message
+# Display previous messages
 for message in st.session_state.messages:
-    if message["role"] != "system":
-        avatar = POULSTAR_LOGO_URL if message["role"] == "assistant" else "👤"
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 # Get new user input
-if prompt := st.chat_input("Type your message here..."):
+if prompt := st.chat_input("Ask Mixtral anything..."):
+    # Add user message to history and display it
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="👤"):
+    with st.chat_message("user"):
         st.markdown(prompt)
 
     # Get and display assistant's response
-    with st.chat_message("assistant", avatar=POULSTAR_LOGO_URL):
-        response_stream = get_ai_response(st.session_state.messages)
+    with st.chat_message("assistant"):
+        response_stream = get_mixtral_response(st.session_state.messages)
         full_response = st.write_stream(response_stream)
 
+    # Add the full response to the history
     st.session_state.messages.append({"role": "assistant", "content": full_response})
