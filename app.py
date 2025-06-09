@@ -3,20 +3,20 @@ import requests
 import json
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Llama 3 Chatbot", page_icon="🦙")
-st.title("🦙 Llama 3 Chatbot")
-st.caption("A powerful chatbot using the Llama 3 8B model via Hugging Face API.")
+st.set_page_config(page_title="Mixtral Chatbot", page_icon="🤖")
+st.title("🤖 Mixtral Chatbot")
+st.caption("A powerful chatbot using the Mixtral 8x7B model via Hugging Face API.")
 
 # --- Constants and API Setup ---
+# UPDATED: We are now using the Mixtral model
 MODEL_ID = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 
 # --- Helper Function to Call the API ---
-def get_llama_response(messages):
+def get_mixtral_response(messages):
     """
     Sends a request to the Hugging Face Inference API and streams the response.
     """
-    # Fetch the API token from Streamlit secrets
     try:
         hf_token = st.secrets["HF_TOKEN"]
     except FileNotFoundError:
@@ -25,37 +25,37 @@ def get_llama_response(messages):
 
     headers = {"Authorization": f"Bearer {hf_token}"}
     
-    # Prepare the payload for the API
+    # --- START OF THE FIX ---
+    # We filter out the 'system' message before sending it to the API
+    # because some models on the Inference API don't handle it well.
+    api_messages = [msg for msg in messages if msg.get("role") != "system"]
+    # --- END OF THE FIX ---
+
     payload = {
-        "inputs": messages,
+        # UPDATED: We send the filtered messages
+        "inputs": api_messages,
         "parameters": {
-            "max_new_tokens": 512,  # Limit the length of the response
+            "max_new_tokens": 512,
             "temperature": 0.7,
             "top_p": 0.95,
             "repetition_penalty": 1.1
         },
-        "stream": True,  # Enable streaming
+        "stream": True,
         "options": {
-            "wait_for_model": True  # Wait if the model is loading
+            "wait_for_model": True
         }
     }
 
-    # Make the streaming POST request
     try:
         with requests.post(API_URL, headers=headers, json=payload, stream=True, timeout=180) as response:
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
-            
-            # Each line in a streaming response is a JSON object.
-            # We need to parse it to get the token.
+            response.raise_for_status()
             for line in response.iter_lines():
                 if line:
-                    # The API sends lines like b'data:{"token": {"text": "..."}}'
                     decoded_line = line.decode('utf-8')
                     if decoded_line.startswith('data:'):
                         json_str = decoded_line[len('data:'):].strip()
                         if json_str:
                             data = json.loads(json_str)
-                            # Yield the actual text token
                             yield data.get("token", {}).get("text", "")
 
     except requests.exceptions.RequestException as e:
@@ -66,35 +66,21 @@ def get_llama_response(messages):
 
 # --- Chat Interface Logic ---
 
-# Initialize chat history in session state
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "system", "content": "You are a helpful assistant."}]
 
-# Display chat messages from history
 for message in st.session_state.messages:
-    # Do not display the system message
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# Get user input
-if prompt := st.chat_input("Ask Llama 3 anything..."):
-    # Add user message to history and display it
+if prompt := st.chat_input("Ask Mixtral anything..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Get and display assistant's response using the streaming function
     with st.chat_message("assistant"):
-        # The history sent to the API should not contain previous assistant responses
-        # to avoid confusion, or should be structured correctly. For simplicity here,
-        # we can send a limited history. A more advanced app would manage this better.
-        
-        # We pass the conversation history to the model
-        response_stream = get_llama_response(st.session_state.messages)
-        
-        # Use write_stream to display the streaming response
+        response_stream = get_mixtral_response(st.session_state.messages)
         full_response = st.write_stream(response_stream)
 
-    # Add the full response to the history for future context
     st.session_state.messages.append({"role": "assistant", "content": full_response})
