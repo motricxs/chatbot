@@ -4,7 +4,6 @@ import json
 from transformers import AutoTokenizer
 
 # --- Page Configuration ---
-# Using a wide layout for a more modern look
 st.set_page_config(page_title="PoulStar AI", page_icon="✨", layout="wide")
 
 # --- Constants and API Setup ---
@@ -13,13 +12,11 @@ API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 POULSTAR_LOGO_URL = "https://raw.githubusercontent.com/poulstar/.github/main/logo.png"
 
 # --- Header Section with Logo ---
-# Placing the logo at the top and center of the page
-col1, col2, col3 = st.columns([1, 0.5, 1]) # The middle column is for the logo
+col1, col2, col3 = st.columns([1, 0.5, 1])
 with col2:
-    st.image(POULSTAR_LOGO_URL, width=200) # Enlarged logo
+    st.image(POULSTAR_LOGO_URL, width=200)
 
 # --- Main Title and Caption ---
-# All UI text is now in simple English.
 st.title("PoulStar AI Assistant")
 st.caption("✨ Powered by Advanced AI")
 st.divider()
@@ -29,7 +26,6 @@ with st.sidebar:
     st.header("⚙️ Settings")
     st.write("Here you can control the AI assistant.")
     
-    # Sliders for model parameters with simple English labels and help text
     max_new_tokens = st.slider(
         "Max Answer Length",
         min_value=128, max_value=1024, value=512, step=64,
@@ -46,16 +42,12 @@ with st.sidebar:
 # --- Load tokenizer (cached) ---
 @st.cache_resource
 def load_tokenizer():
-    """Loads the tokenizer from Hugging Face."""
     return AutoTokenizer.from_pretrained(MODEL_ID)
 
 tokenizer = load_tokenizer()
 
 # --- Helper Function for API Call ---
 def get_ai_response(messages):
-    """
-    Formats the chat history and sends it to the Hugging Face Inference API.
-    """
     try:
         hf_token = st.secrets["HF_TOKEN"]
     except FileNotFoundError:
@@ -63,6 +55,7 @@ def get_ai_response(messages):
         return
 
     headers = {"Authorization": f"Bearer {hf_token}"}
+    
     prompt_string = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     
     payload = {
@@ -94,18 +87,23 @@ def get_ai_response(messages):
 
 # --- Chat Interface Logic ---
 
-# Initialize chat history with a welcome message in English
+# --- THIS IS THE LINE THAT WAS CHANGED ---
+# Initialize chat history with a system prompt and a welcome message.
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am the PoulStar AI Assistant. How can I help you today?"}]
+    st.session_state.messages = [
+        {"role": "system", "content": "You are PoulStar AI, a helpful and friendly assistant."},
+        {"role": "assistant", "content": "Hello! I am the PoulStar AI Assistant. How can I help you today?"}
+    ]
+# --- END OF CHANGE ---
 
-# Display previous messages
+# Display previous messages, but skip the system message
 for message in st.session_state.messages:
-    # Use the PoulStar logo as the assistant's avatar
-    avatar = POULSTAR_LOGO_URL if message["role"] == "assistant" else "👤"
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
+    if message["role"] != "system":
+        avatar = POULSTAR_LOGO_URL if message["role"] == "assistant" else "👤"
+        with st.chat_message(message["role"], avatar=avatar):
+            st.markdown(message["content"])
 
-# Get new user input with an English placeholder
+# Get new user input
 if prompt := st.chat_input("Type your message here..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="👤"):
