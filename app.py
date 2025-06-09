@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+from transformers import AutoTokenizer
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Mixtral Chatbot", page_icon="🤖")
@@ -8,14 +9,22 @@ st.title("🤖 Mixtral Chatbot")
 st.caption("A powerful chatbot using the Mixtral 8x7B model via Hugging Face API.")
 
 # --- Constants and API Setup ---
-# UPDATED: We are now using the Mixtral model
 MODEL_ID = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+
+# --- Load the tokenizer once using Streamlit's cache ---
+# This is lightweight and doesn't require torch or a GPU.
+@st.cache_resource
+def load_tokenizer():
+    """Loads the tokenizer from Hugging Face."""
+    return AutoTokenizer.from_pretrained(MODEL_ID)
+
+tokenizer = load_tokenizer()
 
 # --- Helper Function to Call the API ---
 def get_mixtral_response(messages):
     """
-    Sends a request to the Hugging Face Inference API and streams the response.
+    Formats the chat history using the official tokenizer and sends it to the API.
     """
     try:
         hf_token = st.secrets["HF_TOKEN"]
@@ -25,20 +34,19 @@ def get_mixtral_response(messages):
 
     headers = {"Authorization": f"Bearer {hf_token}"}
     
-    # --- START OF THE FIX ---
-    # We filter out the 'system' message before sending it to the API
-    # because some models on the Inference API don't handle it well.
-    api_messages = [msg for msg in messages if msg.get("role") != "system"]
-    # --- END OF THE FIX ---
-
+    # --- THE CORRECT WAY TO FORMAT THE PROMPT ---
+    # Use the tokenizer to apply the chat template. This is the official and robust method.
+    # We set add_generation_prompt=True to ensure the template ends correctly for the model to generate a response.
+    prompt_string = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    
     payload = {
-        # UPDATED: We send the filtered messages
-        "inputs": api_messages,
+        "inputs": prompt_string,
         "parameters": {
             "max_new_tokens": 512,
             "temperature": 0.7,
             "top_p": 0.95,
-            "repetition_penalty": 1.1
+            "repetition_penalty": 1.1,
+            "return_full_text": False
         },
         "stream": True,
         "options": {
@@ -57,7 +65,6 @@ def get_mixtral_response(messages):
                         if json_str:
                             data = json.loads(json_str)
                             yield data.get("token", {}).get("text", "")
-
     except requests.exceptions.RequestException as e:
         yield f"\n\n**Error:** Could not connect to the API. {e}"
     except json.JSONDecodeError as e:
@@ -67,20 +74,24 @@ def get_mixtral_response(messages):
 # --- Chat Interface Logic ---
 
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "system", "content": "You are a helpful assistant."}]
+    st.session_state.messages = [] # Start with an empty history
 
+# Display previous messages
 for message in st.session_state.messages:
-    if message["role"] != "system":
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
+# Get new user input
 if prompt := st.chat_input("Ask Mixtral anything..."):
+    # Add user message to history and display it
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Get and display assistant's response
     with st.chat_message("assistant"):
         response_stream = get_mixtral_response(st.session_state.messages)
         full_response = st.write_stream(response_stream)
 
+    # Add the full response to the history
     st.session_state.messages.append({"role": "assistant", "content": full_response})
