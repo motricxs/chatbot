@@ -4,13 +4,24 @@ import json
 from transformers import AutoTokenizer
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Mixtral Chatbot", page_icon="🤖")
-st.title("🤖 Mixtral Chatbot")
-st.caption("A powerful chatbot using the Mixtral 8x7B model via Hugging Face API.")
+# The page title in the browser tab is now "Poulstar Chatbot"
+st.set_page_config(page_title="Poulstar Chatbot", page_icon="✨")
 
 # --- Constants and API Setup ---
 MODEL_ID = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
+# 1. Added the logo URL
+POULSTAR_LOGO_URL = "https://raw.githubusercontent.com/poulstar/.github/main/logo.png"
+
+# 1. Displaying the logo at the top of the page
+st.image(POULSTAR_LOGO_URL, width=200)
+
+# 2. Changed the title as requested
+st.title("Poulstar chatbot")
+
+# 3. The caption line has been completely removed.
+# st.caption("A powerful chatbot using the Mixtral 8x7B model via Hugging Face API.") # This line is now deleted.
+
 
 # --- Load the tokenizer once using Streamlit's cache ---
 # This is lightweight and doesn't require torch or a GPU.
@@ -82,7 +93,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Get new user input
-if prompt := st.chat_input("Ask Mixtral anything..."):
+if prompt := st.chat_input("Ask me anything..."):
     # Add user message to history and display it
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
