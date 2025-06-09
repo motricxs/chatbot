@@ -8,7 +8,7 @@ st.title("🦙 Llama 3 Chatbot")
 st.caption("A powerful chatbot using the Llama 3 8B model via Hugging Face API.")
 
 # --- Constants and API Setup ---
-MODEL_ID = "meta-llama/Meta-Llama-3-8B-Instruct"
+MODEL_ID = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 API_URL = f"https://api-inference.huggingface.co/models/{MODEL_ID}"
 
 # --- Helper Function to Call the API ---
